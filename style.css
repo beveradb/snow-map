@@ -89,6 +89,20 @@ body, html {
 	50% { transform: translateY(-4px); }
 }
 
+.btn {
+	border: 1px solid rgba(0,0,0,0.1);
+	border-radius: 10px;
+	padding: 8px 10px;
+	background: #fff;
+	cursor: pointer;
+}
+.btn.primary { background: #1e90ff; color: #fff; border-color: #1e90ff; }
+.cta-row { display: flex; gap: 8px; margin-bottom: 10px; }
+
+.suggestions ul, #suggestions-list { list-style: disc; padding-left: 18px; }
+.suggestion-item { cursor: pointer; padding: 2px 0; }
+.suggestion-item:hover { text-decoration: underline; }
+
 /* Responsive: collapse sidebar */
 @media (max-width: 900px) {
 	#app { grid-template-columns: 0 1fr; }
