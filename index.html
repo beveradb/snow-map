@@ -1,16 +1,50 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snow Map</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <link rel="stylesheet" href="style.css">
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Snow Map</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+	<link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="map"></div>
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script src="data/snowy-places.js"></script>
-    <script src="script.js"></script>
+	<div id="app">
+		<aside class="sidebar" id="sidebar">
+			<div class="sidebar-header">
+				<h1>Snow Map</h1>
+				<p class="tagline">Find your next year‑round snowy adventure.</p>
+			</div>
+			<div class="controls">
+				<label class="search-label" for="search">Search places</label>
+				<input id="search" type="text" class="search" placeholder="e.g., Mont Blanc, Fuji, Denali">
+				<div class="filters">
+					<h3>Filters</h3>
+					<div class="filter-row">
+						<label><input type="checkbox" class="region-filter" value="North America" checked> North America</label>
+						<label><input type="checkbox" class="region-filter" value="South America" checked> South America</label>
+						<label><input type="checkbox" class="region-filter" value="Europe" checked> Europe</label>
+						<label><input type="checkbox" class="region-filter" value="Africa" checked> Africa</label>
+						<label><input type="checkbox" class="region-filter" value="Asia" checked> Asia</label>
+						<label><input type="checkbox" class="region-filter" value="Oceania" checked> Oceania</label>
+						<label><input type="checkbox" class="region-filter" value="Antarctica" checked> Antarctica</label>
+					</div>
+				</div>
+			<div class="suggestions">
+				<h3>Suggestions</h3>
+				<ul id="suggestions-list"></ul>
+			</div>
+			<footer class="footer">
+				<p>Built for snow lovers • <a href="https://snowmap.beveradb.com" rel="noopener">snowmap.beveradb.com</a></p>
+			</footer>
+		</aside>
+		<button id="toggle" class="toggle" aria-label="Toggle sidebar">☰</button>
+		<div id="map"></div>
+	</div>
+	<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+	<script src="data/snowy-places.js"></script>
+	<script src="script.js"></script>
 </body>
 </html>
