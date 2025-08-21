@@ -45,9 +45,9 @@ document.addEventListener('DOMContentLoaded', () => {
 	function updateChoropleth() {
 		if (!countriesLayer) return;
 		countriesLayer.eachLayer(layer => {
-			const id = layer.feature.id; // numeric id
+			const id = layer.feature.id;
 			const count = countryCounts[id] || 0;
-			layer.setStyle({ fillColor: getColorForCount(count) });
+			layer.setStyle({ fillColor: getColorForCount(count), cursor: 'pointer' });
 		});
 	}
 
@@ -55,15 +55,31 @@ document.addEventListener('DOMContentLoaded', () => {
 		const legend = L.control({ position: 'bottomright' });
 		legend.onAdd = function () {
 			const div = L.DomUtil.create('div', 'leaflet-control legend');
-			div.innerHTML = '<strong>Snowy spots</strong><br>' +
-				colorScale.map((s, i) => {
-					const from = i === 0 ? 0 : colorScale[i-1].max + 1;
-					const to = s.max === Infinity ? '10+' : s.max;
-					return `<span class="swatch" style="background:${s.color}"></span>${from}–${to}`;
-				}).join('<br>');
+			let html = '<strong>Snowy spots</strong><br>';
+			let prev = -1;
+			for (const step of colorScale) {
+				const from = prev + 1;
+				const to = step.max === Infinity ? '10+' : step.max;
+				html += `<span class="swatch" style="background:${step.color}"></span>${from}–${to}<br>`;
+				prev = step.max;
+			}
+			div.innerHTML = html;
 			return div;
 		};
 		legend.addTo(map);
+	}
+
+	function selectCountry(feature, layer) {
+		try {
+			const bbox = layer.getBounds();
+			map.fitBounds(bbox.pad(0.2));
+			// compute places inside
+			const gj = layer.toGeoJSON();
+			const inside = snowyPlaces.filter(p => {
+				try { return turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), gj); } catch(_) { return false; }
+			});
+			renderResults(inside);
+		} catch(_) {}
 	}
 
 	fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
@@ -73,10 +89,15 @@ document.addEventListener('DOMContentLoaded', () => {
 			countriesLayer = L.geoJSON(geojson, {
 				style: () => ({ color: '#cfd8dc', weight: 1, fillColor: '#f3f7fa', fillOpacity: 0.85, opacity: 1 }),
 				onEachFeature: (f, l) => {
-					l.on({ mouseover: e => e.target.setStyle({ fillColor: '#e2f1ff' }), mouseout: () => updateChoropleth() });
+					l.on({
+						mouseover: e => e.target.setStyle({ fillColor: '#e2f1ff' }),
+						mouseout: () => updateChoropleth(),
+						click: () => selectCountry(f, l)
+					});
 				}
 			}).addTo(map);
 			buildLegend();
+			computeCountryCounts();
 			updateChoropleth();
 		});
 
@@ -89,9 +110,27 @@ document.addEventListener('DOMContentLoaded', () => {
 		return L.divIcon({ className: 'snow', html: svg, iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -16] });
 	}
 
-	const cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45 });
+	const cluster = L.markerClusterGroup({
+		showCoverageOnHover: false,
+		maxClusterRadius: 45,
+		disableClusteringAtZoom: 6,
+		spiderfyOnMaxZoom: true,
+		zoomToBoundsOnClick: true
+	});
 	map.addLayer(cluster);
 	let currentMarkers = [];
+	let userLocation = null;
+
+	function haversine(a, b) {
+		const toRad = d => d * Math.PI/180;
+		const R = 6371;
+		const dLat = toRad(b[0]-a[0]);
+		const dLon = toRad(b[1]-a[1]);
+		const lat1 = toRad(a[0]);
+		const lat2 = toRad(b[0]);
+		const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+		return 2*R*Math.asin(Math.sqrt(h));
+	}
 
 	function enrichPopup(place) {
 		const title = encodeURIComponent(place.name.replace(/,.*/,''));
@@ -108,6 +147,23 @@ document.addEventListener('DOMContentLoaded', () => {
 			}).catch(() => null);
 	}
 
+	function computeCountryCounts() {
+		if (!countriesLayer) return;
+		countryCounts = {};
+		const gj = countriesLayer.toGeoJSON();
+		snowyPlaces.forEach(p => {
+			const pt = turf.point([p.lng, p.lat]);
+			for (const feature of gj.features) {
+				try {
+					if (turf.booleanPointInPolygon(pt, feature)) {
+						countryCounts[feature.id] = (countryCounts[feature.id] || 0) + 1;
+						break;
+					}
+				} catch(_) { }
+			}
+		});
+	}
+
 	function renderMarkers() {
 		cluster.clearLayers();
 		currentMarkers = [];
@@ -115,53 +171,40 @@ document.addEventListener('DOMContentLoaded', () => {
 		const allowed = new Set(regionCheckboxes.filter(cb => cb.checked).map(cb => cb.value));
 		const icon = createSnowDivIcon();
 
-		// reset counts
-		countryCounts = {};
-
-		snowyPlaces
-			.filter(p => allowed.has(getRegion(p.lat, p.lng)) && (!query || p.name.toLowerCase().includes(query)))
-			.forEach(p => {
-				const m = L.marker([p.lat, p.lng], { icon });
-				m.on('click', async () => {
-					m.bindPopup('<em>Loading…</em>').openPopup();
-					const extra = await enrichPopup(p);
-					const html = extra ?
-						`<div class="popup-media">${extra.img ? `<img src="${extra.img}" alt="${p.name}">` : ''}<div class="meta"><strong>${p.name}</strong><br/><small>${getRegion(p.lat,p.lng)}</small><br/>${extra.desc ? extra.desc : ''}<br/>${extra.url ? `<a href="${extra.url}" target="_blank" rel="noopener">Learn more ↗</a>` : ''}</div></div>` :
-						`<strong>${p.name}</strong><br/><small>${getRegion(p.lat,p.lng)}</small>`;
-					m.setPopupContent(html);
-				});
-				cluster.addLayer(m);
-				currentMarkers.push({ place: p, marker: m });
-
-				// country counting using turf
-				// We'll approximate by matching to countries layer bounding boxes once available
-			});
-
-		// If countriesLayer already loaded, compute counts precisely via turf
-		if (countriesLayer) {
-			countryCounts = {};
-			const gj = countriesLayer.toGeoJSON();
-			snowyPlaces.forEach(p => {
-				const pt = turf.point([p.lng, p.lat]);
-				for (const feature of gj.features) {
-					try {
-						if (turf.booleanPointInPolygon(pt, feature)) {
-							countryCounts[feature.id] = (countryCounts[feature.id] || 0) + 1;
-							break;
-						}
-					} catch(_) { /* ignore */ }
-				}
-			});
-			updateChoropleth();
+		let filtered = snowyPlaces.filter(p => allowed.has(getRegion(p.lat, p.lng)) && (!query || p.name.toLowerCase().includes(query)));
+		if (userLocation) {
+			filtered = filtered
+				.map(p => ({ p, d: haversine([userLocation.lat, userLocation.lng], [p.lat, p.lng]) }))
+				.sort((a,b) => a.d - b.d)
+				.map(x => x.p);
 		}
+
+		filtered.forEach(p => {
+			const m = L.marker([p.lat, p.lng], { icon });
+			m.on('click', async () => {
+				m.bindPopup('<em>Loading…</em>').openPopup();
+				const extra = await enrichPopup(p);
+				const html = extra ?
+					`<div class="popup-media">${extra.img ? `<img src="${extra.img}" alt="${p.name}">` : ''}<div class="meta"><strong>${p.name}</strong><br/><small>${getRegion(p.lat,p.lng)}</small><br/>${extra.desc ? extra.desc : ''}<br/>${extra.url ? `<a href="${extra.url}" target="_blank" rel="noopener">Learn more ↗</a>` : ''}</div></div>` :
+					`<strong>${p.name}</strong><br/><small>${getRegion(p.lat,p.lng)}</small>`;
+				m.setPopupContent(html);
+			});
+			cluster.addLayer(m);
+			currentMarkers.push({ place: p, marker: m });
+		});
+
+		computeCountryCounts();
+		updateChoropleth();
+
+		renderResults(filtered);
 	}
 
-	function renderSuggestions() {
+	function renderResults(list) {
 		suggestionsList.innerHTML = '';
-		[...snowyPlaces].sort((a,b) => a.name.localeCompare(b.name)).slice(0, 14).forEach(p => {
+		list.slice(0, 30).forEach(p => {
 			const li = document.createElement('li');
-			li.textContent = p.name;
-			li.className = 'suggestion-item';
+			li.className = 'result-card';
+			li.innerHTML = `<strong>${p.name}</strong><br/><small>${getRegion(p.lat,p.lng)}</small>`;
 			li.addEventListener('click', () => {
 				map.setView([p.lat, p.lng], 6);
 				const found = currentMarkers.find(x => x.place.name === p.name);
@@ -169,6 +212,10 @@ document.addEventListener('DOMContentLoaded', () => {
 			});
 			suggestionsList.appendChild(li);
 		});
+	}
+
+	function renderSuggestions() {
+		renderResults([...snowyPlaces].sort((a,b) => a.name.localeCompare(b.name)));
 	}
 
 	searchInput.addEventListener('input', renderMarkers);
@@ -187,8 +234,9 @@ document.addEventListener('DOMContentLoaded', () => {
 	locateBtn.addEventListener('click', () => {
 		if (!navigator.geolocation) return alert('Geolocation not supported on this browser.');
 		navigator.geolocation.getCurrentPosition(pos => {
-			const { latitude, longitude } = pos.coords;
-			map.setView([latitude, longitude], 5);
+			userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+			map.setView([userLocation.lat, userLocation.lng], 5);
+			renderMarkers();
 		}, () => alert('Could not get your location.'));
 	});
 

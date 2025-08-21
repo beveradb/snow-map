@@ -103,6 +103,19 @@ body, html {
 .suggestion-item { cursor: pointer; padding: 2px 0; }
 .suggestion-item:hover { text-decoration: underline; }
 
+/* Results list */
+.results-list { list-style: none; padding-left: 0; margin: 8px 0 0; }
+.results-list li { background: #fff; border: 1px solid rgba(0,0,0,0.06); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer; }
+.results-list li:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.1); }
+
+/* Marker cluster custom colors */
+.marker-cluster-small { background: rgba(30,144,255,0.2); }
+.marker-cluster-small div { background: #1e90ff; color: #fff; }
+.marker-cluster-medium { background: rgba(59,130,246,0.2); }
+.marker-cluster-medium div { background: #3b82f6; color: #fff; }
+.marker-cluster-large { background: rgba(29,78,216,0.2); }
+.marker-cluster-large div { background: #1d4ed8; color: #fff; }
+
 /* Responsive: collapse sidebar */
 @media (max-width: 900px) {
 	#app { grid-template-columns: 0 1fr; }
