@@ -122,8 +122,6 @@ document.addEventListener('DOMContentLoaded', () => {
 		zoomToBoundsOnClick: true
 	});
 	map.addLayer(cluster);
-
-	// Spiderfy clusters when already sufficiently zoomed
 	cluster.on('clusterclick', e => {
 		if (map.getZoom() >= 5) {
 			e.layer.spiderfy();
@@ -153,11 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			.then(r => r.ok ? r.json() : null)
 			.then(data => {
 				if (!data || data.type === 'https://mediawiki.org/wiki/HyperSwitch/errors/not_found') return null;
-				return {
-					url: data.content_urls?.desktop?.page,
-					img: data.thumbnail?.source,
-					desc: data.extract ? data.extract.slice(0, 180) + (data.extract.length > 180 ? '…' : '') : null
-				};
+				return { url: data.content_urls?.desktop?.page, img: data.thumbnail?.source, desc: data.extract ? data.extract.slice(0, 180) + (data.extract.length > 180 ? '…' : '') : null };
 			}).catch(() => null);
 	}
 
@@ -175,6 +169,15 @@ document.addEventListener('DOMContentLoaded', () => {
 					}
 				} catch(_) { }
 			}
+		});
+	}
+
+	function focusMarkerByName(name, targetZoom = 7) {
+		const item = currentMarkers.find(x => x.place.name === name);
+		if (!item) return;
+		cluster.zoomToShowLayer(item.marker, () => {
+			map.setView(item.marker.getLatLng(), targetZoom, { animate: true });
+			item.marker.openPopup();
 		});
 	}
 
@@ -219,11 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			const li = document.createElement('li');
 			li.className = 'result-card';
 			li.innerHTML = `<strong>${p.name}</strong><br/><small>${getRegion(p.lat,p.lng)}</small>`;
-			li.addEventListener('click', () => {
-				map.setView([p.lat, p.lng], 7);
-				const found = currentMarkers.find(x => x.place.name === p.name);
-				if (found) found.marker.openPopup();
-			});
+			li.addEventListener('click', () => focusMarkerByName(p.name, 8));
 			suggestionsList.appendChild(li);
 		});
 	}
@@ -241,9 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		});
 		const pick = allowed[Math.floor(Math.random() * allowed.length)];
 		if (!pick) return;
-		map.setView([pick.lat, pick.lng], 7, { animate: true });
-		const found = currentMarkers.find(x => x.place.name === pick.name);
-		if (found) found.marker.openPopup();
+		focusMarkerByName(pick.name, 8);
 	});
 	locateBtn.addEventListener('click', () => {
 		if (!navigator.geolocation) return alert('Geolocation not supported on this browser.');
