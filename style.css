@@ -109,3 +109,19 @@ body, html {
 	.sidebar { display: none; }
 	.toggle { left: 10px; }
 }
+
+/* Legend */
+.leaflet-control.legend {
+	background: rgba(255,255,255,0.9);
+	padding: 8px 10px;
+	border-radius: 10px;
+	box-shadow: 0 0 15px rgba(0,0,0,0.12);
+	font-size: 12px;
+	line-height: 16px;
+}
+.legend .swatch { display: inline-block; width: 14px; height: 10px; margin-right: 6px; border-radius: 3px; vertical-align: -1px; }
+
+/* Popup media */
+.popup-media { display: flex; gap: 10px; align-items: center; }
+.popup-media img { width: 90px; height: 60px; object-fit: cover; border-radius: 6px; }
+.popup-media .meta { max-width: 220px; }

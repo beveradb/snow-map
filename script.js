@@ -1,13 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
-	// Map init
 	const map = L.map('map', { zoomControl: true }).setView([20, 0], 2);
-
-	// Colored basemap
 	L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
 		attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
 	}).addTo(map);
 
-	// UI refs
 	const sidebar = document.getElementById('sidebar');
 	const app = document.getElementById('app');
 	const toggleBtn = document.getElementById('toggle');
@@ -23,7 +19,6 @@ document.addEventListener('DOMContentLoaded', () => {
 		app.style.gridTemplateColumns = hidden ? '320px 1fr' : '0 1fr';
 	});
 
-	// Regions helper
 	function getRegion(lat, lng) {
 		if (lat <= -60) return 'Antarctica';
 		if (lat >= 7 && lng < -25) return 'North America';
@@ -34,33 +29,57 @@ document.addEventListener('DOMContentLoaded', () => {
 		return 'Asia';
 	}
 
-	// Country coloring via TopoJSON (light pastel fill on hover)
+	// Country layer + choropleth
+	let countriesLayer;
+	let countryCounts = {};
+	const colorScale = [
+		{ max: 0, color: '#f0f4f8' },
+		{ max: 1, color: '#dbeafe' },
+		{ max: 3, color: '#bfdbfe' },
+		{ max: 6, color: '#93c5fd' },
+		{ max: 10, color: '#60a5fa' },
+		{ max: Infinity, color: '#3b82f6' },
+	];
+	function getColorForCount(c) { return colorScale.find(s => c <= s.max).color; }
+
+	function updateChoropleth() {
+		if (!countriesLayer) return;
+		countriesLayer.eachLayer(layer => {
+			const id = layer.feature.id; // numeric id
+			const count = countryCounts[id] || 0;
+			layer.setStyle({ fillColor: getColorForCount(count) });
+		});
+	}
+
+	function buildLegend() {
+		const legend = L.control({ position: 'bottomright' });
+		legend.onAdd = function () {
+			const div = L.DomUtil.create('div', 'leaflet-control legend');
+			div.innerHTML = '<strong>Snowy spots</strong><br>' +
+				colorScale.map((s, i) => {
+					const from = i === 0 ? 0 : colorScale[i-1].max + 1;
+					const to = s.max === Infinity ? '10+' : s.max;
+					return `<span class="swatch" style="background:${s.color}"></span>${from}–${to}`;
+				}).join('<br>');
+			return div;
+		};
+		legend.addTo(map);
+	}
+
 	fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
 		.then(r => r.json())
 		.then(topology => {
 			const geojson = topojson.feature(topology, topology.objects.countries);
-			function style() {
-				return {
-					color: '#cfd8dc',
-					weight: 1,
-					fillColor: '#f3f7fa',
-					fillOpacity: 0.8,
-					opacity: 1
-				};
-			}
-			function hover(e) {
-				const layer = e.target;
-				layer.setStyle({ fillColor: '#e2f1ff' });
-			}
-			function reset(e) {
-				countries.resetStyle(e.target);
-			}
-			const countries = L.geoJSON(geojson, { style, onEachFeature: (f, l) => {
-				l.on({ mouseover: hover, mouseout: reset });
-			}}).addTo(map);
+			countriesLayer = L.geoJSON(geojson, {
+				style: () => ({ color: '#cfd8dc', weight: 1, fillColor: '#f3f7fa', fillOpacity: 0.85, opacity: 1 }),
+				onEachFeature: (f, l) => {
+					l.on({ mouseover: e => e.target.setStyle({ fillColor: '#e2f1ff' }), mouseout: () => updateChoropleth() });
+				}
+			}).addTo(map);
+			buildLegend();
+			updateChoropleth();
 		});
 
-	// DivIcon snowflake
 	function createSnowDivIcon() {
 		const svg = `
 			<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -70,10 +89,24 @@ document.addEventListener('DOMContentLoaded', () => {
 		return L.divIcon({ className: 'snow', html: svg, iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -16] });
 	}
 
-	// Clustering layer
 	const cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45 });
 	map.addLayer(cluster);
 	let currentMarkers = [];
+
+	function enrichPopup(place) {
+		const title = encodeURIComponent(place.name.replace(/,.*/,''));
+		const wikiApi = `https://en.wikipedia.org/api/rest_v1/page/summary/${title}`;
+		return fetch(wikiApi)
+			.then(r => r.ok ? r.json() : null)
+			.then(data => {
+				if (!data || data.type === 'https://mediawiki.org/wiki/HyperSwitch/errors/not_found') return null;
+				return {
+					url: data.content_urls?.desktop?.page,
+					img: data.thumbnail?.source,
+					desc: data.extract ? data.extract.slice(0, 180) + (data.extract.length > 180 ? '…' : '') : null
+				};
+			}).catch(() => null);
+	}
 
 	function renderMarkers() {
 		cluster.clearLayers();
@@ -81,13 +114,46 @@ document.addEventListener('DOMContentLoaded', () => {
 		const query = (searchInput.value || '').toLowerCase().trim();
 		const allowed = new Set(regionCheckboxes.filter(cb => cb.checked).map(cb => cb.value));
 		const icon = createSnowDivIcon();
+
+		// reset counts
+		countryCounts = {};
+
 		snowyPlaces
 			.filter(p => allowed.has(getRegion(p.lat, p.lng)) && (!query || p.name.toLowerCase().includes(query)))
 			.forEach(p => {
-				const m = L.marker([p.lat, p.lng], { icon }).bindPopup(`<strong>${p.name}</strong><br/><small>${getRegion(p.lat, p.lng)}</small>`);
+				const m = L.marker([p.lat, p.lng], { icon });
+				m.on('click', async () => {
+					m.bindPopup('<em>Loading…</em>').openPopup();
+					const extra = await enrichPopup(p);
+					const html = extra ?
+						`<div class="popup-media">${extra.img ? `<img src="${extra.img}" alt="${p.name}">` : ''}<div class="meta"><strong>${p.name}</strong><br/><small>${getRegion(p.lat,p.lng)}</small><br/>${extra.desc ? extra.desc : ''}<br/>${extra.url ? `<a href="${extra.url}" target="_blank" rel="noopener">Learn more ↗</a>` : ''}</div></div>` :
+						`<strong>${p.name}</strong><br/><small>${getRegion(p.lat,p.lng)}</small>`;
+					m.setPopupContent(html);
+				});
 				cluster.addLayer(m);
 				currentMarkers.push({ place: p, marker: m });
+
+				// country counting using turf
+				// We'll approximate by matching to countries layer bounding boxes once available
 			});
+
+		// If countriesLayer already loaded, compute counts precisely via turf
+		if (countriesLayer) {
+			countryCounts = {};
+			const gj = countriesLayer.toGeoJSON();
+			snowyPlaces.forEach(p => {
+				const pt = turf.point([p.lng, p.lat]);
+				for (const feature of gj.features) {
+					try {
+						if (turf.booleanPointInPolygon(pt, feature)) {
+							countryCounts[feature.id] = (countryCounts[feature.id] || 0) + 1;
+							break;
+						}
+					} catch(_) { /* ignore */ }
+				}
+			});
+			updateChoropleth();
+		}
 	}
 
 	function renderSuggestions() {
@@ -105,7 +171,6 @@ document.addEventListener('DOMContentLoaded', () => {
 		});
 	}
 
-	// Events
 	searchInput.addEventListener('input', renderMarkers);
 	regionCheckboxes.forEach(cb => cb.addEventListener('change', renderMarkers));
 	surpriseBtn.addEventListener('click', () => {
@@ -127,7 +192,6 @@ document.addEventListener('DOMContentLoaded', () => {
 		}, () => alert('Could not get your location.'));
 	});
 
-	// Title overlay
 	const title = L.control({ position: 'topright' });
 	title.onAdd = function () {
 		this._div = L.DomUtil.create('div', 'info');
@@ -136,7 +200,6 @@ document.addEventListener('DOMContentLoaded', () => {
 	};
 	title.addTo(map);
 
-	// Initial render
 	renderMarkers();
 	renderSuggestions();
 });
