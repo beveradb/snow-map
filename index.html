@@ -14,10 +14,15 @@
 </head>
 <body>
 	<div id="app">
+		<div id="loading" class="loading">
+			<div class="spinner"></div>
+			Loading snow locations...
+		</div>
 		<aside class="sidebar" id="sidebar">
 			<div class="sidebar-header">
-				<h1>Snow Map</h1>
+				<h1>❄️ Snow Map</h1>
 				<p class="tagline">Find your next year‑round snowy adventure.</p>
+				<button id="theme-toggle" class="btn sm theme-toggle" title="Toggle theme">🌙</button>
 			</div>
 			<div class="controls">
 				<label class="search-label" for="search">Search places</label>
@@ -25,6 +30,19 @@
 				<div class="cta-row">
 					<button id="surprise" class="btn primary">❄️ Surprise me</button>
 					<button id="locate" class="btn">📍 Use my location</button>
+				</div>
+				<div class="quick-row">
+					<label class="checkbox"><input id="within" type="checkbox"> Within view</label>
+					<div class="spacer"></div>
+					<button id="reset" class="btn sm" title="Reset map and filters">Reset view</button>
+					<button id="copy" class="btn sm" title="Copy shareable link">Copy link</button>
+				</div>
+				<div class="quick-row">
+					<label class="checkbox"><input id="clustering" type="checkbox" checked> Enable clustering</label>
+					<div class="spacer"></div>
+				</div>
+				<div class="right-row">
+					<button id="clear" class="btn sm" title="Clear search">Clear</button>
 				</div>
 				<div class="filters">
 					<h3>Filters</h3>
@@ -39,7 +57,7 @@
 					</div>
 				</div>
 			<div class="suggestions">
-				<h3>Results</h3>
+				<h3>Results <span id="results-count" class="badge">0</span></h3>
 				<ul id="suggestions-list" class="results-list"></ul>
 			</div>
 			<footer class="footer">
