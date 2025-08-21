@@ -4,6 +4,10 @@ document.addEventListener('DOMContentLoaded', () => {
 		attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
 	}).addTo(map);
 
+	// Ensure country polygons render below markers
+	const countryPane = map.createPane('countries');
+	countryPane.style.zIndex = 200;
+
 	const sidebar = document.getElementById('sidebar');
 	const app = document.getElementById('app');
 	const toggleBtn = document.getElementById('toggle');
@@ -73,7 +77,6 @@ document.addEventListener('DOMContentLoaded', () => {
 		try {
 			const bbox = layer.getBounds();
 			map.fitBounds(bbox.pad(0.2));
-			// compute places inside
 			const gj = layer.toGeoJSON();
 			const inside = snowyPlaces.filter(p => {
 				try { return turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), gj); } catch(_) { return false; }
@@ -87,6 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		.then(topology => {
 			const geojson = topojson.feature(topology, topology.objects.countries);
 			countriesLayer = L.geoJSON(geojson, {
+				pane: 'countries',
 				style: () => ({ color: '#cfd8dc', weight: 1, fillColor: '#f3f7fa', fillOpacity: 0.85, opacity: 1 }),
 				onEachFeature: (f, l) => {
 					l.on({
@@ -113,11 +117,21 @@ document.addEventListener('DOMContentLoaded', () => {
 	const cluster = L.markerClusterGroup({
 		showCoverageOnHover: false,
 		maxClusterRadius: 45,
-		disableClusteringAtZoom: 6,
+		disableClusteringAtZoom: 5,
 		spiderfyOnMaxZoom: true,
 		zoomToBoundsOnClick: true
 	});
 	map.addLayer(cluster);
+
+	// Spiderfy clusters when already sufficiently zoomed
+	cluster.on('clusterclick', e => {
+		if (map.getZoom() >= 5) {
+			e.layer.spiderfy();
+		} else {
+			e.layer.zoomToBounds();
+		}
+	});
+
 	let currentMarkers = [];
 	let userLocation = null;
 
@@ -206,7 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			li.className = 'result-card';
 			li.innerHTML = `<strong>${p.name}</strong><br/><small>${getRegion(p.lat,p.lng)}</small>`;
 			li.addEventListener('click', () => {
-				map.setView([p.lat, p.lng], 6);
+				map.setView([p.lat, p.lng], 7);
 				const found = currentMarkers.find(x => x.place.name === p.name);
 				if (found) found.marker.openPopup();
 			});
@@ -227,7 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		});
 		const pick = allowed[Math.floor(Math.random() * allowed.length)];
 		if (!pick) return;
-		map.setView([pick.lat, pick.lng], 6, { animate: true });
+		map.setView([pick.lat, pick.lng], 7, { animate: true });
 		const found = currentMarkers.find(x => x.place.name === pick.name);
 		if (found) found.marker.openPopup();
 	});
@@ -235,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		if (!navigator.geolocation) return alert('Geolocation not supported on this browser.');
 		navigator.geolocation.getCurrentPosition(pos => {
 			userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-			map.setView([userLocation.lat, userLocation.lng], 5);
+			map.setView([userLocation.lat, userLocation.lng], 6);
 			renderMarkers();
 		}, () => alert('Could not get your location.'));
 	});
